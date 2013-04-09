@@ -1,0 +1,6 @@
+syntax: glob
+dist/*
+JamesBound.sublime-project
+JamesBound.sublime-workspace
+*.hi
+*.o

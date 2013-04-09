@@ -1,0 +1,19 @@
+Name:                JamesBound
+Version:             0.0
+Description:         Bounded-depth π-calculus Playground
+License:             CRAPL
+License-file:        LICENSE
+Author:              Emanuele D'Osualdo
+Maintainer:          emanuele.dosualdo@gmail.com
+Build-Type:          Simple
+Cabal-Version:       >=1.2
+
+Executable jb
+  Main-is:           JamesBound.hs
+  hs-source-dirs:    src
+  ghc-options:       -rtsopts -O
+  Build-Depends:
+    base>=4.0,
+    text,
+    parsec,
+    cmdargs
