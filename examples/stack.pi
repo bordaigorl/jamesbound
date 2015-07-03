@@ -1,0 +1,8 @@
+Stack[push, pop, bot] | push<a>.push<b>.push<c>.pop<res>.pop<res>
+
+
+Stack[push, pop, next] :=
+    push(top).
+        (νnext'.( next'<top, next> | Stack[push, pop, next'] ))
+  + pop(r).
+        next(top, next').(r<top> | Stack[push, pop, next'])

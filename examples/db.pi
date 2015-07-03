@@ -1,0 +1,8 @@
+// This is an example program
+// It is bounded in depth
+#global p;
+
+S[x] | C | C
+
+S[x] := p?y.( y!x | S[y] )
+C := νx.p!x

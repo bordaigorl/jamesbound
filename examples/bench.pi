@@ -1,0 +1,17 @@
+Env[p] | H[p,a]
+
+Env[p] := *(νx.p!x)
+Rep[p] := νx.p!x | Rep[p]
+
+C[p,x] := p?y.(x!y | C[p,y]) // Unbounded
+D[p,x] := p?y.(x!x | D[p,y]) // Bounded
+E1[p,x] := p?y.(x!y | E2[p,y]) // Bounded
+E2[p,x] := p?y.(x!x | E1[p,y]) // Bounded
+F[p,x] := p?y.(x!y | F[p,y]) + p?y.(x!x | F[p,y]) // Unbounded
+
+
+G[p] := νa.νb.(G1[p,a] | G2[p,b])
+G1[p,x] := p?y.(x!y | G2[p,x])
+G2[p,x] := νy.(p!y.G1[p,x])
+
+H[p,x] := p?y.(x! + x?.C[p,x] | H[p,y])

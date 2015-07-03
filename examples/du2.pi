@@ -1,0 +1,11 @@
+// This term builds chains (C[p,x]) of names of finite length but decides the
+// length (S[p]) non-deterministically upfront.
+// Thus, every execution has bounded depth but the reachable states do not have
+// a global bound on depth.
+
+#global go;
+
+S[p]
+
+S[p] := τ.(νx.p!x | S[p]) + p?y.C[p,y] 
+C[p,x] := p?y.( y!x | C[p,y] )

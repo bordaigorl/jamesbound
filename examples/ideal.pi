@@ -1,0 +1,5 @@
+νs.(Server[s] | Env[s])
+
+Client[c,s] := c?.Client[c,s] + τ.(s!c | Client[c,s])
+Server[s]   := s?c.(c! | Server[s])
+Env[s]      := Env[s] | νc.Client[c,s]

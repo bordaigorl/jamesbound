@@ -1,0 +1,17 @@
+// Pong:
+// there's a list at p and a list at q.
+// one process consumes the elements of p adding elements to a new list
+// adding an extra element at the top of it;
+// then it sends the head to q, where the other process does the same
+// sending the new head back to p.
+// This is to illustrate unboundedness in depth where the paths of increasing
+// length are unrelated
+W[p,q] | W[q,p] | νx.p!x
+// Wait
+W[p,q] := p?x.(νy.T[x,y,p,q])
+// Traverse
+T[x,t,p,q] :=
+    x?y .
+        ( νz.(z!t | T[y,z,p,q]) )
+    + τ .
+        ( νz.(z!t | q!z) | W[p,q] )

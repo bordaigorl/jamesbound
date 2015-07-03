@@ -1,0 +1,26 @@
+//ν(db, lock, read, write, unlock).
+ν(visit,ping).(
+    // Database
+    lock(ready).( ready() | db() )
+    | // Server
+     *( ping(pong).pong<>
+      + visit(reply).(
+            ν(ready, val).(
+                lock<ready> | ready().read<val> | val().write().unlock().reply()
+            )
+     ))
+    | // Locked Database
+     *( db().(
+           read(val).(val<> | db<>)
+         + write().db<>
+         + unlock().( lock(ready).( ready() | db() ))
+     ))
+    | *( τ.(ν(c,reply).
+            c<>
+          | // Client
+           *( c().(
+               visit<reply>
+             | reply().c<>
+           ))
+      ))
+)

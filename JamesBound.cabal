@@ -1,19 +1,77 @@
-Name:                JamesBound
-Version:             0.0
-Description:         Bounded-depth π-calculus Playground
-License:             CRAPL
+Name:                picalc
+Version:             0.1
+Stability:           Experimental
+License:             BSD3
 License-file:        LICENSE
 Author:              Emanuele D'Osualdo
 Maintainer:          emanuele.dosualdo@gmail.com
+Copyright:           (c) 2013 Emanuele D'Osualdo
 Build-Type:          Simple
 Cabal-Version:       >=1.2
+Description:
+    PiCalc is a library for the representation and manipulation
+    of pi-calculus terms and semantics.
+    It implements many useful algorithms such as congruence and rewriting.
+    It supports many concepts related to the Depth-bounded fragment of pi-calculus.
 
 Executable jb
   Main-is:           JamesBound.hs
   hs-source-dirs:    src
   ghc-options:       -rtsopts -O
+  cpp-options:       -D__CABAL_BUILD__
   Build-Depends:
     base>=4.0,
     text,
     parsec,
-    cmdargs
+    containers >= 0.5,
+    multiset,
+    pretty,
+    array,
+    mtl,
+    MaybeT,
+    --
+    graphviz >= 2999.16.0.0,
+    cmdargs >= 0.10.3,
+    haskeline >= 0.7.0.3,
+    filepath,
+    directory,
+    random,
+    transformers
+
+Library
+  hs-source-dirs:    src
+  ghc-options:       -O
+
+  Exposed-Modules:
+    Language.PiCalc.Dot
+    Language.PiCalc.Infix
+    Language.PiCalc.Parser
+    Language.PiCalc.Pretty
+    Language.PiCalc.Semantics.Process
+    Language.PiCalc.Semantics.Substitutions
+    Language.PiCalc.Semantics.Cover
+    Language.PiCalc.Semantics
+    Language.PiCalc.Syntax.AST
+    Language.PiCalc.Syntax.Manipulations
+    Language.PiCalc.Syntax.StdNF
+    Language.PiCalc.Syntax.Term
+    Language.PiCalc.Syntax.Congruence
+    Language.PiCalc.Syntax
+    Language.PiCalc
+    Data.Graph.Ullmann
+
+  Other-Modules:
+    Data.Set.Infix
+    Data.GraphVizEither
+
+
+  Build-Depends:
+    base>=4.0,
+    pretty,
+    parsec,
+    containers,
+    multiset,
+    array,
+    mtl,
+    MaybeT,
+    graphviz

@@ -1,0 +1,7 @@
+// chains
+#global p;
+
+S[x] | C | C | C
+
+S[x] := p(y).(x<y> | S[y])
+C := νa.p<a>

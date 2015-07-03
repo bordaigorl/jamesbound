@@ -1,0 +1,38 @@
+/*
+X → X1 X2
+X → ""
+X1 → A1
+X2 → X3 X4
+X3 → a?
+X4 → X X5
+X5 → A2
+
+Y → Y1 Y2
+Y1 → B1
+Y2 → Y3 Y4
+Y3 → b?
+Y4 → B2
+
+A1 → spawn(callY)
+A2 → b<>
+
+B1 → a!
+B2 → c!
+*/
+#global a b ciccio;
+
+Rules ‖ Factory[spawn] ‖ spawn<callX>
+
+Factory[spawn] :=
+    ( spawn(call).
+           (ν(push, pop, m, ok, r, bot).
+                ( call<push, pop, m, ok> ‖ Stack[push, pop, bot] ‖ Ctrl[push, pop, ok, r] ) )
+    ‖ Factory[spawn])
+
+Stack[push, pop, next] :=
+    push(x,m).
+        (νnext'.( next'<x, m, next> | Stack[push, pop, next'] ))
+  + pop(r).
+        next(x, m, next').(r<x, m> | Stack[push, pop, next'])
+
+

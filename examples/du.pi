@@ -1,0 +1,8 @@
+// Unbounded in depth
+#global p;
+
+S[x] | C
+
+S[x] := p?y.( y!x | S[y] )
+
+C := νx.p!x | C

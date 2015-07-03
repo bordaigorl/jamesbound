@@ -1,0 +1,9 @@
+// Ladder example:
+// a process works its way up a ladder of names
+// up to the top increasing the depth
+
+
+νa.(*(νr.a<r>) | Grow[a])
+
+Fwd[x,y] := x(m).(y<m> | Fwd[x,y])
+Grow[x] :=  x(y).(Fwd[x,y] | Grow[y])

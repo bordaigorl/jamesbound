@@ -1,0 +1,11 @@
+#global pu po;
+
+νbot.Stack[pu, po, bot] | Client[output]
+
+Client[res] := ν(a,b,c).pu<a>.pu<b>.pu<c>.po<res>.po<res>
+
+Stack[push, pop, next] :=
+    push(top).
+        (νnext'.( next'<top, next> | Stack[push, pop, next'] ))
+  + pop(r).
+        next(top, next').(r<top> | Stack[push, pop, next'])

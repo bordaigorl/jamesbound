@@ -1,0 +1,9 @@
+A[i, r] | νt.P[t, i, r]
+
+// This simulates a resettable counter:
+//   * i = increment
+//   * r = reset
+// counter value is number of `t!` under scope
+P[t, i, r] := i?.(t! | P[t,i,r]) + r?.(νt'.P[t',i,r])
+A[i, r] := r!.B[i, r]
+B[i, r] := i!.A[i, r]

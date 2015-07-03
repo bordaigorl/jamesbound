@@ -1,0 +1,6 @@
+νs.(S[s] | E[s])
+
+// C[c,s] := c?.C[c,s] + τ.(s!c | C[c,s])
+C[c,s] := s!c.c?.C[c,s]
+S[s]   := s?c.(c! | S[s])
+E[s]   := E[s] | νc.C[c,s]

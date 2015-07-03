@@ -1,0 +1,44 @@
+graph {
+    295 [label=x295
+        ,style=filled
+        ,contents="Gigio"
+        ,shape=ellipse];
+    131 [label=x131
+        ,style=filled
+        ,contents="3333"
+        ,shape=ellipse];
+    213 [label=x213
+        ,style=filled
+        ,contents="5555"
+        ,shape=ellipse];
+    377 [label=x377
+        ,style=filled
+        ,contents="123"
+        ,shape=ellipse];
+    378 [label="(a?.… + a!)"
+        ,style=rounded
+        ,shape=box];
+    379 [label="p?y327.…"
+        ,style=rounded
+        ,shape=box];
+    380 [label="(x131?.… + x131!)"
+        ,style=rounded
+        ,contents="Gigio324"
+        ,shape=box];
+    381 [label="(x213?.… + x213!)"
+        ,style=rounded
+        ,contents="Gigio23"
+        ,shape=box];
+    382 [label="p!x377"
+        ,style=rounded
+        ,contents="Gigio1"
+        ,shape=box];
+    383 [label="*νx49.p!x49"
+        ,style=rounded
+        ,contents="Gigio3"
+        ,shape=box];
+    295 -- 379;
+    131 -- 380;
+    213 -- 381;
+    377 -- 382;
+}

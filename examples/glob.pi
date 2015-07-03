@@ -1,0 +1,6 @@
+// Testing Globals
+#global a b;
+
+νx.P[x] | νa.P[a]
+
+P[x] := a!x.P[b] + b?y.P[y]

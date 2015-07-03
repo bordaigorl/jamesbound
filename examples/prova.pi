@@ -1,0 +1,4 @@
+// This is an example program
+S[p,x] | νa.p!a | νb.p!b
+
+S[p, x] := p?y.( y!x | S[p, y] )
