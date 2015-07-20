@@ -6,6 +6,7 @@ module Language.PiCalc.Syntax.StdNF(
     stdToTerm,
     isStdZero,
     stdNF,
+    nf,
     mergeStd,
     renameStd,
     distFactors,
@@ -83,6 +84,18 @@ stdNF p = StdNF stdp
     stdzr (Parall ps) = MSet.unionsMap stdzr ps
     stdzr (New ns p) = MSet.map addnames $ stdzr p
       where addnames (p', ns', fns) = (p', Set.union (Set.intersection ns fns) ns', Set.difference fns ns)
+
+nf :: PiTerm -> PiTerm
+nf p = stdToTerm $ StdNF fcts'
+  where
+    StdNF fcts = stdNF p
+    fcts' = MSet.map factorNF fcts
+    factorNF (StdFactor p x) = StdFactor (mapConts nf p) x
+
+    mapConts f (Alt alts) = Alt $ MSet.map (mapCont f) alts
+    mapConts f (Bang   p) = Bang $ f p
+    mapConts f p = p
+    mapCont f (act, p) = (act, f p)
 
 isValidStdNF :: StdNFTerm -> Bool
 isValidStdNF (StdNF ps) = and $ map isValid $ MSet.distinctElems ps

@@ -12,6 +12,7 @@ module Frontend(
     , readInputProgs
     , getWriter
     , getWriterOrOut
+    , getWriterOrOut'
     , userInput
     , userInputWith
     , output
@@ -161,7 +162,7 @@ alsoFromTerm ps = do
     case term of
         Nothing -> return ps
         Just str -> do
-            prog <- readProgFromString "<option>" str
+            prog <- readProgFromString "[option]" str
             return (prog:ps)
 
 readInputProg :: JB state (PiProg, NameId)
@@ -176,7 +177,7 @@ readProgFromFile' :: FilePath -> JB state (String, PiProg, NameId)
 readProgFromFile' "-" = do
     istr <- userInput "Input Term: "
     case istr of
-        Just str -> readProgFromString "<stdin>" str
+        Just str -> readProgFromString "[stdin]" str
         Nothing -> (warnLn "Warning: no input, exiting.") >> exitOk
 readProgFromFile' filename = do
     ok <- liftIO $ doesFileExist filename
@@ -201,9 +202,12 @@ getWriter (Just "-") = return ($ stdout)
 getWriter (Just out) = return $ withFile out WriteMode
 
 getWriterOrOut :: Maybe String -> JB state ((Handle -> IO r) -> IO r)
-getWriterOrOut Nothing = return ($ stdout)
-getWriterOrOut (Just "-") = return ($ stdout)
-getWriterOrOut (Just out) = return $ withFile out WriteMode
+getWriterOrOut = getWriterOrOut' WriteMode
+
+getWriterOrOut' :: IOMode -> Maybe String -> JB state ((Handle -> IO r) -> IO r)
+getWriterOrOut' _    Nothing    = return ($ stdout)
+getWriterOrOut' _    (Just "-") = return ($ stdout)
+getWriterOrOut' mode (Just out) = return $ withFile out mode
 
 -- exitCfaTimeout = hPutStrLn stderr "The Analysis timed out!" >> exitWith (ExitFailure 12)
 -- exitBfcTimeout = hPutStrLn stderr "Verification timed out!" >> exitWith (ExitFailure 13)

@@ -101,6 +101,7 @@ hierarchical p = do
         result -> do
             declareTypablyHierarchical True
             declareInput p
+            infoLn $ "Bound on depth: " ++ (show $ length $ baseTypes result)
             infoLn "Typable with base types"
             info "   "
             infoLn $ intercalate " ⤙ " $ map (("t"++).show) $ baseTypes result
@@ -145,9 +146,10 @@ printBaseConstr cs = shout $ unlines $ map prcs cs
 isSupported :: PiProg -> Bool
 isSupported prog = (null $ defsList $ defs prog) && (not $ hasPCall $ start prog)
   where
-    hasPCall (Parall ps) = any hasPCall $ MSet.distinctElems ps
-    hasPCall (Alt    as) = any (hasPCall.snd) $ MSet.distinctElems as
-    hasPCall (New  _  p) = hasPCall p
-    hasPCall (Bang    p) = hasPCall p
+    hasPCall (Parall  ps) = any hasPCall $ MSet.distinctElems ps
+    hasPCall (Alt     as) = any (hasPCall.snd) $ MSet.distinctElems as
+    hasPCall (New  _   p) = hasPCall p
+    hasPCall (Bang p@(Alt _)) = hasPCall p
+    hasPCall (Bang     p) = True
     hasPCall (PiCall _ _) = True
     -- hasPCall _ = False

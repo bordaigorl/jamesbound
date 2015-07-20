@@ -37,8 +37,10 @@ data JBOpt =
         , quotienting  :: Quotienting
         }
     | Convert { -- transformation of pi-terms into other representations
-          inputFile    :: FilePath
+          inputFiles   :: [FilePath]
+        , inputTerm    :: Maybe String
         , outputFile   :: Maybe FilePath
+        , extension    :: Maybe String
         , withStats    :: Bool
         , outType      :: ReprType
         }
@@ -60,7 +62,7 @@ data RTDetail = AllCovering | FstCovering | ShowCongr | TermSnippet | HideQuot |
 data Quotienting = NoQuot | SiblingsQuot | GlobalQuot deriving (Show, Eq, Ord, Data, Typeable)
 data PreorderRed = NoRed | GroupUnf deriving (Show, Eq, Ord, Data, Typeable)
 
-data ReprType = NoOutput | Normalised | Standard | Restricted | StdPict | JavaScript -- | StrPict
+data ReprType = NoOutput | Normalised | NormalForm | Standard | Restricted | StdPict | JavaScript -- | StrPict
     deriving (Show, Eq, Data, Typeable)
 
 explore :: JBOpt
@@ -149,19 +151,28 @@ convert = Convert {
       -- TODO: 1. get args and default to stdin,
       --       2. add --term piterm option skipping reading file
       --       3. accept more than one file at once, option "--ext" allows to output to FILE.ext
-      inputFile  = def &= typFile &= argPos 0
+      inputFiles = [] &= typFile &= args
 
     , outputFile = Nothing &= typFile
-        &= name "o" &= name "output" &= explicit
-        &= help "Converted output"
+        &= name "output" &= name "o" &= explicit
+        &= help "Converted output file (use `-` for stdout)"
+
+    , inputTerm = Nothing
+        &= name "term" &= name "t" &= explicit &= typ "PITERM"
+        &= help "The term to be converted"
+
+    , extension = Nothing &= typ "EXT"
+        &= name "ext" &= name "e" &= explicit
+        &= help "Converted term is output in INPUTFILEPATH.EXT"
 
     , withStats  = False
-        &= name "stats" &= name "S" &= explicit &= typFile
+        &= name "S" &= name "stats" &= explicit &= typFile
         &= help "Print some stats about the input program"
 
     , outType    = enum [
           Normalised &= help "No-confl and normalised (default)"
         , Standard   &= help "Standard normal form"
+        , NormalForm &= name "nf" &= help "Normal form (see hierarchical systems)"
         , Restricted &= help "Minimal restricted normal form"
         , StdPict    &= name "graph" &= name "g" &= explicit &= help "Standard Normal Form graph"
         , JavaScript &= name "js" &= name "j" &= explicit &= help "JavaScript representation"
@@ -182,7 +193,7 @@ typeinf = TypeInf {
         &= name "term" &= name "t" &= explicit &= typ "PITERM"
         &= help "The term to be typed"
 
-    , skipUnsupported = True
+    , skipUnsupported = False
         &= name "skip" &= name "u" &= explicit
         &= help "Skip unsupported input terms"
 
