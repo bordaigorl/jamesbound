@@ -2,7 +2,7 @@
     Module      :  Language.PiCalc
     Description :  Syntax and Semantics of pi-calculus
     Copyright   :  Copyright (C) 2013 Emanuele D'Osualdo
-    License     :  BSD-like
+    License     :  GPLv2
     Maintainer  :  emanuele.dosualdo@gmail.com
 
 This module defines data structures and functions for the representation of the

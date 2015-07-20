@@ -2,7 +2,7 @@
     Module      :  Language.PiCalc.Parser
     Description :  A Parser for pi-calculus
     Copyright   :  Copyright (C) 2013 Emanuele D'Osualdo
-    License     :  BSD-like
+    License     :  GPLv2
     Maintainer  :  emanuele.dosualdo@gmail.com
 
 A Parser for pi-calculus based on @Parsec@.

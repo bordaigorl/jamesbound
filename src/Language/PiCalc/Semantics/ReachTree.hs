@@ -3,7 +3,7 @@
     Module      :  ReachTree
     Description :  Reachability Tree of a PiCalc term
     Copyright   :  Copyright (C) 2013 Emanuele D'Osualdo
-    License     :  BSD-like
+    License     :  GPLv2
     Maintainer  :  emanuele.dosualdo@cs.ox.ac.uk
 
 Reachability Tree of a PiCalc term

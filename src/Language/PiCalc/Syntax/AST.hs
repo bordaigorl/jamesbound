@@ -2,7 +2,7 @@
     Module      :  Language.PiCalc.Syntax
     Description :  Abstract Syntax Trees for pi-calculus terms
     Copyright   :  Copyright (C) 2013 Emanuele D'Osualdo
-    License     :  BSD-like
+    License     :  GPLv2
     Maintainer  :  emanuele.dosualdo@gmail.com
     Stability   :  experimental
     Portability :  portable
