@@ -33,6 +33,8 @@ showTVar (ArgType n i) = (show $ pretty n) ++ "[" ++ show i ++ "]"
 showArity Nothing = "Any"
 showArity (Just i) = show i ++ "-ary"
 
+prlkg p = map (\(k,l)->(pretty k, pretty l)) $ Map.toList $ linkedToGraph p
+
 testC p =
     case unifyTypes p of
         Left err -> putStrLn $ "Not typable: " ++ show err

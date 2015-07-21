@@ -56,7 +56,7 @@ instance Eq StdNFTerm where
     This is necessarily true when @q = stdNF t@ where @t@ satisfies no-conflict.
 
     Invariants for @StdFactor p ns@:
-      * @x@ is sequential,
+      * @p@ is sequential,
       * all the names in @ns@ are free names of @p@.
 -}
 data StdFactor = StdFactor {seqTerm::PiTerm, restrNames::Set PiName}
@@ -72,6 +72,7 @@ instance Eq StdFactor where
 seqFromStd :: StdNFTerm -> MultiSet PiTerm
 seqFromStd (StdNF m) = MSet.map seqTerm m
 
+-- | Standard normal form of a term. No renaming is applied, names are preserved.
 stdNF :: PiTerm -> StdNFTerm
 stdNF p = StdNF stdp
   where
@@ -85,6 +86,8 @@ stdNF p = StdNF stdp
     stdzr (New ns p) = MSet.map addnames $ stdzr p
       where addnames (p', ns', fns) = (p', Set.union (Set.intersection ns fns) ns', Set.difference fns ns)
 
+-- | Normal form: transforms a term @t@ in a congruent standard normal form term
+--                which has all sub-terms in standard normal form.
 nf :: PiTerm -> PiTerm
 nf p = stdToTerm $ StdNF fcts'
   where
@@ -144,11 +147,11 @@ stdNFcc (StdNF ps) = foldr ins [] $ MSet.toOccurList ps
   where
     ins (s,n) cur =
         case break (connected s) cur of
-        (rest, (ns, ms):rest') ->
-            let ns' = Set.union ns (restrNames s)
-                ms' = MSet.insertMany s n ms
-            in  rest++((ns',ms'):rest')
-        (_, []) -> (restrNames s, MSet.fromOccurList [(s,n)]):cur
+            (rest, (ns, ms):rest') ->
+                let ns' = Set.union ns (restrNames s)
+                    ms' = MSet.insertMany s n ms
+                in  rest++((ns',ms'):rest')
+            (_, []) -> (restrNames s, MSet.fromOccurList [(s,n)]):cur
     connected s (ns, _) = not $ Set.null $ Set.intersection (restrNames s) ns
 
 {-

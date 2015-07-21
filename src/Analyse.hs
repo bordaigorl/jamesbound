@@ -148,7 +148,7 @@ rTreeToGraphElems det t@(RT m) seen = (nodes, edges)
     coveredAncestor z (Just v)
         | (term $ vertProc t v) `coveredBy` z =
             (v,CovEdge):if allCovering then coveredAncestor z $ vertParent t v else []
-        -- | otherwise = (v, CongEdge):(coveredAncestor z $ vertParent t v)
+        --  | otherwise = (v, CongEdge):(coveredAncestor z $ vertParent t v)
         | otherwise = coveredAncestor z $ vertParent t v
     congEdges
         | ShowCongr `elem` det =

@@ -20,9 +20,19 @@ typeInference = do
     progs <- readInputProgs
     when (length progs > 1) $ setOpt shouldShowFn
     skipu <- getOpt skipUnsupported
+    disclaimer
     sequence_ $
         intersperse sepLines $
             [infer source prog | (source, prog, _) <- progs, (not skipu) || isSupported prog  ]
+
+disclaimer = do
+    shoutLn " .-----------------  << Warning >>  -------------------."
+    shoutLn " | The current version of the type system is a variant |"
+    shoutLn " | of the one presented in the paper.                  |"
+    shoutLn " | It does not fully support global free names and is  |"
+    shoutLn " | restricted in the kind of types it can infer for    |"
+    shoutLn " | better performance.                                 |"
+    shoutLn " '-----------------------------------------------------'\n"
 
 sepLines = info "\n" >> sepLine >> info "\n"
 
@@ -98,6 +108,13 @@ hierarchical p = do
                 forM_ ys $ \y ->
                     info $ (show $ pretty y) ++ " "
                 infoLn ""
+        NotTShaped sametype -> do
+            declareTypablyHierarchical False
+            declareInput p
+            info "    These names have the same type but are always tied to each other: "
+            forM_ sametype $ \y ->
+                info $ (show $ pretty y) ++ " "
+            infoLn ""
         result -> do
             declareTypablyHierarchical True
             declareInput p

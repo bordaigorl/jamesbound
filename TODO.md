@@ -99,7 +99,13 @@ Channel names:
 
 # TODO
 
-+ Convert should be able to take term from param or from stdin
++ Make parser incremental (save/return state) so one can add terms/defs at runtime
++ Allow no starting term in syntax, and arbitrary position of starting term (or at least both initial and last)
++ Consider using the offside rule for scoping (either just for defs or for any scoping)
+
++ Convert: def-free, star-free, remove unused defs flag
+
++ Pretty: variant that minimises clash-avoiding name decorations
 
 + Use View patterns to pattern match any → StdNFTerm/PiTerm
 

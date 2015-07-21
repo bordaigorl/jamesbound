@@ -32,7 +32,7 @@ convert1 source prog writeOut = do
         hPutStr h $ comment $ stats
         case target of
             Normalised -> hPutStrLn h $ show $ pretty prog
-            NormalForm -> hPutStrLn h $ show $ pretty $ nfProg prog -- todo
+            NormalForm -> hPutStrLn h $ show $ pretty $ nfProg prog
             Standard   -> hPutStrLn h $ show $ pretty $ stdProg prog
             Restricted -> hPutStrLn h $ show $ pretty $ prog{start=restrNF $ stdNF $ start prog}
             StdPict    -> hPutDot h $ termToDot $ start prog

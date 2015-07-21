@@ -62,7 +62,7 @@ data RTDetail = AllCovering | FstCovering | ShowCongr | TermSnippet | HideQuot |
 data Quotienting = NoQuot | SiblingsQuot | GlobalQuot deriving (Show, Eq, Ord, Data, Typeable)
 data PreorderRed = NoRed | GroupUnf deriving (Show, Eq, Ord, Data, Typeable)
 
-data ReprType = NoOutput | Normalised | NormalForm | Standard | Restricted | StdPict | JavaScript -- | StrPict
+data ReprType = NoOutput | Normalised | NormalForm | Standard | Restricted | StdPict | JavaScript --  | StrPict
     deriving (Show, Eq, Data, Typeable)
 
 explore :: JBOpt
@@ -190,7 +190,7 @@ typeinf = TypeInf {
       inputFiles = [] &= typ "[FILE..]" &= args
 
     , inputTerm = Nothing
-        &= name "term" &= name "t" &= explicit &= typ "PITERM"
+        &= name "t" &= name "term" &= explicit &= typ "PITERM"
         &= help "The term to be typed"
 
     , skipUnsupported = False
