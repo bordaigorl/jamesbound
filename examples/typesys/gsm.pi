@@ -1,0 +1,53 @@
+/*
+ * Project:  Petruchio
+ * Filename: gsm.pi
+ * Created:  16.05.2007
+ * Author:   Tim Strazny
+ * Remarks:  This translation of the GSM handover protocol into the pi calculus
+ *           is taken from Fredrik Orava and Joachim Parrow: "An Algebraic
+ *           Verification of a Mobile Network", p. 11, Fig 2. A formal
+ *           specification of the handover procedure. (1 Mobile Station, 2 Base
+ *           Stations, 1 Mobile Switching Center, 1 channel per Base Station)
+ */
+
+// main
+// new (fa, fp, m1, m2, l).
+( pHC<l, m1> | pCC<fa, fp, l> | pBSp<fp, m1>
+| pBSa<fa, m2> | pMS<m2>
+)
+|
+ pCC(fa, fp, l).
+    ( in(v).fa<data>.fa<v>.pCC<fa, fp, l>
+    + l(m_new).fa<ho_cmd>.fa<m_new>.
+        ( fp(x)./*[x=ho_com].*/fa<ch_rel>.fa(m_old).l<m_old>.pCC<fp, fa, l>
+        + fa(y)./*[y=ho_fail].*/l<m_new>.pCC<fa, fp, l>
+        )
+    )
+|
+
+pHC(l, m).
+    l<m>.l(m_new).pHC<l, m_new>
+|
+
+pBSa(f, m).
+    f(x).
+    ( /*[x=data].*/f(v).m<data>.m<v>.pBSa<f, m>
+    + /*[x=ho_cmd].*/f(v).m<ho_cmd>.m<v>.
+        ( f(y)./*[y=ch_rel].*/f<m>.pBSp<f, m>
+        + m(z)./*[z=ho_fail].*/f<ho_fail>.pBSa<f, m>
+        )
+    )
+|
+
+pBSp(f, m).
+    m(x)./*[x=ho_acc].*/f<ho_com>.pBSa<f, m>
+|
+
+pMS(m).
+    m(x).
+    ( /*[x=data].*/m(v).out<v>.pMS<m>
+    + /*[x=ho_cmd].*/m(m_new).
+        ( m_new<ho_acc>.pMS<m_new>
+        + m<ho_fail>.pMS<m>
+        )
+    )

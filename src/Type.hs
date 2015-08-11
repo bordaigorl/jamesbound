@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 -- | Type checking mode of jb.
 --   It runs type inference to decide if a term is typably hierarchical.
 module Type(typeInference, runTypeInference) where
@@ -13,6 +14,9 @@ import qualified Data.Map as Map
 import qualified Data.MultiSet as MSet
 import Data.List(sort, intercalate, intersperse)
 
+import Language.PiCalc.Pretty(nest)
+-- import Text.PrettyPrint(nest, braces, sep, punctuate, comma)
+
 runTypeInference = runJB typeInference ()
 
 typeInference:: JB () ()
@@ -20,10 +24,11 @@ typeInference = do
     progs <- readInputProgs
     when (length progs > 1) $ setOpt shouldShowFn
     skipu <- getOpt skipUnsupported
-    disclaimer
+    infer <- selectAlgorithm
     sequence_ $
         intersperse sepLines $
-            [infer source prog | (source, prog, _) <- progs, (not skipu) || isSupported prog  ]
+            [apply infer source prog | (source, prog, _) <- progs, (not skipu) || isSupported prog  ]
+    disclaimer
 
 disclaimer = do
     shoutLn " .-----------------  << Warning >>  -------------------."
@@ -46,20 +51,20 @@ showTVar (ArgType n i) = (show $ pretty n) ++ "[" ++ show i ++ "]"
 showArity Nothing = "Any"
 showArity (Just i) = show i ++ "-ary"
 
-declareUnsupported = outputLn "UNSUPPORTED"
-declareSimplyTyped True = outputLn "SIMPLY TYPED"
-declareSimplyTyped False = outputLn "NOT SIMPLY TYPED"
-declareTypablyHierarchical True = outputLn "TYPABLY HIERARCHICAL"
-declareTypablyHierarchical False = outputLn "NOT TYPABLY HIERARCHICAL"
+declareUnsupported = colorWrap "33" $ outputLn "UNSUPPORTED"
+declareSimplyTyped True = positiveLn "SIMPLY TYPED"
+declareSimplyTyped False = negativeLn "NOT SIMPLY TYPED"
+declareTypablyHierarchical True = positiveLn "TYPABLY HIERARCHICAL"
+declareTypablyHierarchical False = negativeLn "NOT TYPABLY HIERARCHICAL"
 
-infer source prog = do
+positiveLn x = colorWrap "32" $ outputLn x
+negativeLn x = colorWrap "31" $ outputLn x
+
+apply infer source prog = do
     let p = start prog
     printFn source
-    if isSupported prog then do
-        onlysimple <- getOpt simple
-        if onlysimple
-            then simpletype p
-            else hierarchical p
+    if isSupported prog then
+        infer p
      else do
         declareUnsupported
         declareInput p
@@ -71,13 +76,30 @@ declareInput term = do
     let prettyPrint | useColor  = prettyTerm (colorHoareStyle defTermOpts)
                     | otherwise = pretty
     info "\n"
-    infoLn $ show $ prettyPrint term
+    infoLn $ show $ nest 4 $ prettyPrint term
+    unlessAlgSimple $ do
+        shoutLn "\nConstraints:\n"
+        shoutBaseConstr term
     info "\n"
+
+selectAlgorithm = do
+    alg <- getOpt algorithm
+    unless (alg == AlgComplete) $ warnLn $ "Warning: Applying " ++ show alg ++ " algorithm"
+    case alg of
+        AlgComplete   -> return (hierarchical inferTypes)
+        AlgAltCompl   -> return (hierarchical inferTypesSlow)
+        AlgIncomplete -> warnIncomplete >> return (hierarchical inferTypesIncomplete)
+        AlgSimple     -> return simpletype
+  where warnIncomplete = warnLn "Warning: The incomplete type system may reject terms which can be proved hierarchical with the complete algorithm (but has better performance).\n"
+
+unlessAlgSimple m = do
+    alg <- getOpt algorithm
+    unless (alg == AlgSimple) m
 
 printFn fn = do
     flag <- getOpt showFileNames
     case flag of
-        Just True -> (outputLn $ "# " ++ fn) >> info "\n"
+        Just True -> header (output $ "\n# " ++ fn) >> output "\n" >> info "\n"
         _         -> return ()
 
 simpletype p =
@@ -94,36 +116,39 @@ simpletype p =
 
 
 
-hierarchical p = do
-    case inferTypes p of
+hierarchical infer p = do
+    case infer p of
         ArityMismatch mismatch -> do
             declareSimplyTyped False
             declareInput p
             reportArityMismatch mismatch
-        Inconsistent conflicts -> do
+        Inconsistent {..} -> do
             declareTypablyHierarchical False
             declareInput p
-            forM_ conflicts $ \ys -> do
+            printTypingEnv (allRestr p) typing types
+            forM_ cycles $ \ys -> do
                 info "    Cycle: "
                 forM_ ys $ \y ->
                     info $ (show $ pretty y) ++ " "
                 infoLn ""
-        NotTShaped sametype -> do
+        NotTShaped {..} -> do
             declareTypablyHierarchical False
             declareInput p
+            printTypingEnv (allRestr p) typing types
             info "    These names have the same type but are always tied to each other: "
-            forM_ sametype $ \y ->
+            forM_ conflicts $ \y ->
                 info $ (show $ pretty y) ++ " "
             infoLn ""
-        result -> do
+        Inferred {..} -> do
             declareTypablyHierarchical True
             declareInput p
-            infoLn $ "Bound on depth: " ++ (show $ length $ baseTypes result)
-            infoLn "Typable with base types"
-            info "   "
-            infoLn $ intercalate " ⤙ " $ map (("t"++).show) $ baseTypes result
-            infoLn "and types"
-            printTypingEnv (allRestr p) (typing result) (types result)
+            when (not $ null $ baseTypes) $ do
+                infoLn "Typable with base types"
+                info "   "
+                infoLn $ intercalate " ⤙ " $ map (("t"++).show) baseTypes
+                -- infoLn "and types"
+                printTypingEnv (allRestr p) typing types
+            infoLn $ "Bound on depth: " ++ (show $ length baseTypes)
 
 
 reportArityMismatch (n1, n2, xs) = do
@@ -134,6 +159,7 @@ reportArityMismatch (n1, n2, xs) = do
     infoLn $   "     Actual arity: " ++ show n2
 
 printTypingEnv names typing types = do
+    infoLn "with types"
     forM_ (Map.toList $ typing) $ \(x, b) ->
         when (isGlobal x || x `Set.member` names) $ do
             info "   "
@@ -147,18 +173,19 @@ printTypingEnv names typing types = do
         info " = t"
         info $ show b
         infoLn $ showTypeArg args
+    infoLn ""
 
 showTypeArg (Just xs) = "[" ++ intercalate ", " (map (\x-> "τ"++show x) xs) ++ "]"
 showTypeArg Nothing = ""
 
-printBaseConstr cs = shout $ unlines $ map prcs cs
+shoutBaseConstr p = shout $ unlines $ map prcs $ constrBaseTypes p
   where
-    prcs (BLt a b) = pp a  ++ " < " ++ pp b
-    prcs (BLtOr as bs c) =   "OR ⎡ " ++ pps as  ++ " < " ++ pp c ++
-                           "\n   ⎣ " ++ pps bs  ++ " < " ++ pp c
+    prcs (BLt a b) = "    " ++ pp a  ++ " < " ++ pp b
+    prcs (BLtOr as bs c) =   "    OR ⎡ " ++ pps as  ++ " < " ++ pp c ++
+                           "\n       ⎣ " ++ pps bs  ++ " < " ++ pp c
 
     pp = show . pretty
-    pps = show . (map pretty)
+    pps xs = show $ map pretty xs
 
 isSupported :: PiProg -> Bool
 isSupported prog = (null $ defsList $ defs prog) && (not $ hasPCall $ start prog)

@@ -15,236 +15,62 @@ Assumptions for the prototype:
  * no definitions, no calls to process ids
 
 -}
-module Language.PiCalc.Analysis.Hierarchical where
+module Language.PiCalc.Analysis.Hierarchical(
+      AdjMap
+    -- * Simple types inference
+    , module Language.PiCalc.Analysis.SimpleTyping
+    -- * Tied to/Migratable relation
+    , isLinkedTo
+    , linkedTo
+    , linkedToGraph
+    , tiedTo
+    , tiedToClasses
+    , relTied
+    -- * Derive constrains on base types
+    , BConstr(..)
+    , constrBaseTypes
+    , baseTypesGraph
+    , allBaseTypesGraphs
+    , quotientBConstr
+    -- * Solve base types constraints
+    , SolverError(..)
+    , solveBTConstr
+    , solveBTConstrIncomplete
+    , solveBTConstrSlow
+    -- * Inference algorithm
+    , InferredTypes(..)
+    , inferTypes
+    , inferTypesIncomplete
+    , inferTypesSlow
+    , inferenceSucceeded
+    , isTypablyHierarchical
+    , reach, reachability
+) where
 
 import Language.PiCalc.Syntax
-import Language.PiCalc.Semantics
+import Language.PiCalc.Analysis.SimpleTyping
 
 import Data.List(partition)
 
 import Data.Set(Set)
 import qualified Data.Set as Set
+import Data.Set.Infix
 import Data.Map(Map)
 import qualified Data.Map as Map
 import qualified Data.MultiSet as MSet
 
-import Data.Graph
+import Control.Monad (foldM)
 
-import Data.Maybe(mapMaybe)
-import Control.Monad
-import Control.Monad.State
-
-{-- TODO:
-      * Simple T-shapedness test (made easier by linear order + most general base types)
-      * Global types: when quotienting constr check if BVar is only assoc with global names → exclude from constraints
+{--
+TODO:
+  * Global types: when quotienting constr check if BVar is only assoc with global names → exclude from constraints
 --}
-
-(∪), (∩), (\\) :: Ord a => Set a -> Set a -> Set a
-(∪) = Set.union
-(∩) = Set.intersection
-(\\) = Set.difference
-
-disjointFrom :: Ord a => Set a -> Set a -> Bool
-disjointFrom a b = Set.null $ a ∩ b
-
-intersects :: Ord a => Set a -> Set a -> Bool
-intersects a b = not $ a `disjointFrom` b
-
-allActions :: PiTerm -> [(PiName, [PiName])]
-allActions (Parall ps) = concatMap allActions (MSet.distinctElems ps)
-allActions (Alt    as) =
-    [strip a | a <- alts, not $ isTau a] ++ concatMap (allActions.snd) alts
-  where
-    alts = MSet.distinctElems as
-    strip (Out n args, _) = (n, args)
-    strip (In  n args, _) = (n, args)
-allActions (New  _  p) = allActions p
-allActions (Bang    p) = allActions p
-allActions (PiCall _ _) = error "Process calls not supported yet"
-
-freeNamesOfSeq :: PiTerm -> [Set PiName]
-freeNamesOfSeq p = snd $ fnofseq Set.empty p
-  where
-    fnofseq rs (Parall ps) = (Set.unions $ map fst fnseqs, concatMap snd fnseqs)
-      where fnseqs = map (fnofseq rs) $ MSet.distinctElems ps
-    fnofseq rs (Alt alts) = (fn, (fn ∩ rs):seqs)
-      where
-        fnseqs = map freePreNames $ MSet.distinctElems alts
-        fn = Set.unions $ map fst fnseqs
-        seqs = concatMap snd fnseqs
-        freePreNames (In x xs, cont) = (Set.insert x $ Set.difference fn' (Set.fromList xs), seqs')
-          where (fn', seqs') = fnofseq Set.empty cont
-        freePreNames (Out x xs, cont) = (Set.union fn' (Set.fromList $ x:xs), seqs')
-          where (fn', seqs') = fnofseq Set.empty cont
-        freePreNames (Tau, cont) = fnofseq Set.empty cont
-    fnofseq rs (New ns proc) = (Set.difference fn ns, seqs)
-      where (fn, seqs) = fnofseq (rs ∪ ns) proc
-    fnofseq rs (Bang proc) = fnofseq rs proc
-    fnofseq rs (PiCall pv xs) = (Set.fromList xs, []) -- not supported!
-
-
------------------------------------------------------------
--- * Types and inference result
------------------------------------------------------------
-
-type BVar = Int
 
 type AdjMap node = Map node (Set node)
+-- ^ this is the representation of a graph in this module
 
-type ArityError = (Int, Int, [PiName])
-
------------------------------------------------------------
--- * Simple types inference via unification
------------------------------------------------------------
-
--- | Type variable representation,
-data TVar = NameType PiName    -- name
-          | ArgType PiName Int -- name/arg position
-            -- to support calls add PVarType PArgType
-    deriving (Eq, Show, Ord)
-
-type ArityC = Maybe Int
-type TypeC = [(ArityC, Set TVar)]
-type ConstrSys = StateT TypeC (Either ArityError)
-
-emptyConstr = []
-
-unsat :: ArityError -> ConstrSys a
-unsat = lift . Left
-
-unifyTypes :: PiTerm -> Either ArityError TypeC
-unifyTypes p = execStateT (constrTypes p) emptyConstr
-
-constrTypes :: PiTerm -> ConstrSys ()
-constrTypes p = do
-    let actions = allActions p
-    -- forM_ actions constrArity
-    ar <- constrArities actions
-    forM_ actions constrArgs
-
-
-onlyNames :: Set TVar -> [PiName]
-onlyNames = onlyNames' . Set.toList
-  where
-    onlyNames' []              = []
-    onlyNames' (NameType x:ts) = x : onlyNames' ts
-    onlyNames' (_:ts)          = onlyNames' ts
-
-tvarsToNames :: Set TVar -> Set PiName
-tvarsToNames tvs = Set.map untag $ Set.filter isNameTvar tvs
-  where untag (NameType x) = x
-
-isNameTvar (NameType _) = True
-isNameTvar _            = False
-
-namesFromTVars tvars =  mapMaybe nameFromTVar $ Set.toList tvars
-nameFromTVar (NameType n) = Just n
-nameFromTVar _            = Nothing
-
-tellEq :: ArityC -> Set TVar -> ConstrSys ()
-tellEq arity tvars = do
-    c <- get
-    (c', new) <- merge arity tvars [] c
-    put c'
-    propagate new
-  where
-    merge arity tvars new [] = return ([(arity, tvars)], (arity, new))
-    merge arity tvars new ((arity', tvars'):rest)
-        | tvars `disjointFrom` tvars' = do
-            (rest', anew') <- merge arity tvars new rest
-            return ((arity', tvars'):rest', anew')
-        | otherwise = do
-            (arity'', a, b) <- mergeArities arity tvars arity' tvars'
-            let tvars'' = tvars ∪ tvars'
-                diff    = tvars \\ tvars'
-                new'    = (onlyNames a, onlyNames b):new
-            merge arity'' tvars'' new' rest
-
-    mergeArities  Nothing  t1  Nothing  t2 = return (Nothing, Set.empty, Set.empty)
-    mergeArities (Just  n) t1  Nothing  t2 = return (Just n, t1, t2 \\ t1 )
-    mergeArities  Nothing  t1 (Just  n) t2 = return (Just n, t1 \\ t2, t2 )
-    mergeArities (Just n1) t1 (Just n2) t2
-        | n1 == n2  = return (Just n1, t1 \\ t2, t2 \\ t1)
-        | otherwise = arityError n1 n2 tvars
-
-    -- (\\) = Set.difference
-
-propagate :: (ArityC, [([PiName], [PiName])]) -> ConstrSys ()
-propagate (Nothing, _) = return ()
-propagate (Just 0,  _) = return () -- optimisation
-propagate (Just n, xs) =
-    forM_ xs $ \(as,bs) ->
-        forM_ [1..n] $ \i ->
-            forM_ [(x,y) | x <- as, y <- bs] $ \(x,y) ->
-                tellEq Nothing $ Set.fromList [ArgType x i, ArgType y i]
-
-arityError n1 n2 tvars = lift $ Left (n1, n2, namesFromTVars tvars)
-arityError' n1 n2 name = lift $ Left (n1, n2, [name])
-
-{-- not needed anymore
-constrArity (n, args) = do
-    let arity = length args
-    tellEq (Just arity) (Set.singleton (NameType n))
-    -- could be made more efficient by constructing a map PiName -> arity and then
-    -- transform it into constraints for subsequent use
---}
-
-constrArities actions = do
-    ar <- constrArities' Map.empty actions
-    put [ (Just a, Set.singleton (NameType n)) | (n,a) <- Map.toList ar ]
-    return ar
-
-constrArities' ar [] = return ar
-constrArities' ar ((n, args):rest) = do
-    let arity = length args
-    case Map.lookup n ar of
-        Nothing -> constrArities' (Map.insert n arity ar) rest
-        Just k
-            | k == arity -> constrArities' ar rest
-            | otherwise  -> arityError' k arity n
-
-
-constrArgs (n, args) =
-    forM_ (zip args [1,2..]) $ constrArg n
-
-constrArg name (arg, i) =
-    tellEq Nothing $ Set.fromList [NameType arg, ArgType name i]
-
-data BTypeClasses = BTC {
-    maxBVar :: BVar
-  , tvar2bvar :: Map TVar BVar
-  , bvar2class :: Map BVar (ArityC, Set TVar)
-}
-
-allBVars btcl = [0..maxBVar btcl]
-allBVarsSet btcl = Map.keysSet $ bvar2class btcl
-getRepr btcl name = (tvar2bvar btcl) Map.! (NameType name)
-getReprArg btcl name i = (tvar2bvar btcl) Map.! (ArgType name i)
-getBVarNames btcl bvar = onlyNames $ snd $ (bvar2class btcl) Map.! bvar
-
-getTypeAnnot btcl =
-    Map.mapKeysMonotonic untag $ Map.filterWithKey isNameType $ tvar2bvar btcl
-  where
-    untag (NameType x) = x
-    isNameType (NameType _) _ = True
-    isNameType _ _ = False
-
-
-typeClasses :: TypeC -> BTypeClasses
-typeClasses c = BTC {
-        maxBVar    = lastBVar
-      , tvar2bvar  = representatives
-      , bvar2class = classes
-    }
-  where
-    tagged          = zip [0..lastBVar] c
-    lastBVar        = length c - 1
-    classes         = Map.fromDistinctAscList tagged
-    representatives = Map.fromList $ concatMap typeClasses' tagged
-    typeClasses' (n, (_, tv)) = [ (x, n) | x <- Set.toAscList tv ]
-                             -- [ (x, n) | (NameType x) <- Set.toAscList tv ]
-
-
+adjacent :: Ord n => n -> AdjMap n -> Set n
+adjacent = Map.findWithDefault (∅)
 
 -----------------------------------------------------------
 -- * Tied to/Migratable relation
@@ -257,13 +83,32 @@ isLinkedTo xs (StdFactor _ ns) = xs `intersects` ns
 linkedTo xs s = filter (isLinkedTo xs) $ distFactors s
 
 linkedToGraph :: PiTerm -> AdjMap PiName
-linkedToGraph p = foldr adjmap Map.empty $ onlyRestr $ freeNamesOfSeq p
+linkedToGraph p = foldr adjmap Map.empty $ onlyRestr $ linkedRestr p
   where
     adjmap xs m = Set.foldr (adj xs) m xs
     adj xs x = Map.insertWith Set.union x xs
     restr = allRestr p
     onlyRestr = map (∩ restr)
 
+linkedRestr :: PiTerm -> [Set PiName]
+linkedRestr p = snd $ fnofseq (∅) p
+  where
+    fnofseq rs (Parall ps) = (Set.unions $ map fst fnseqs, concatMap snd fnseqs)
+      where fnseqs = map (fnofseq rs) $ MSet.distinctElems ps
+    fnofseq rs (Alt alts) = (fn, (fn ∩ rs):seqs)
+      where
+        fnseqs = map freePreNames $ MSet.distinctElems alts
+        fn = Set.unions $ map fst fnseqs
+        seqs = concatMap snd fnseqs
+        freePreNames (In x xs, cont) = (Set.insert x $ Set.difference fn' (Set.fromList xs), seqs')
+          where (fn', seqs') = fnofseq (∅) cont
+        freePreNames (Out x xs, cont) = (Set.union fn' (Set.fromList $ x:xs), seqs')
+          where (fn', seqs') = fnofseq (∅) cont
+        freePreNames (Tau, cont) = fnofseq (∅) cont
+    fnofseq rs (New ns proc) = (Set.difference fn ns, seqs)
+      where (fn, seqs) = fnofseq (rs ∪ ns) proc
+    fnofseq rs (Bang proc) = fnofseq rs proc
+    fnofseq rs (PiCall pv xs) = (Set.fromList xs, []) -- not supported!
 
 tiedTo xs s = tiedTo' False xs [] $ distFactors s
   where
@@ -280,7 +125,26 @@ tiedToClasses s = map extractFree $ stdNFcc s
       where
         fcts = MSet.distinctElems mf
         freenames = Set.unions [freeNames $ seqTerm f | f <- fcts]
-    -- (\\) = Set.difference
+
+
+-- | Relativised tied-to relation:
+--    is any of the @ys@ reachable from @y@ in @g@ never going through nodes in @xs@?
+relTied :: AdjMap PiName -> Set PiName -> (PiName, Set PiName) -> Bool
+relTied g xs (y, ys)
+  | Set.null ys = False -- optimisation
+  | otherwise = reach (Set.singleton y) (linked y)
+  where
+    reach curr front
+        | curr `intersects` ys = True
+        | size >= size'        = False
+        | otherwise            = reach curr' front'
+      where
+        curr' = curr ∪ front
+        front'= Set.foldr (\x s -> (linked x) ∪ s) (∅) front
+        size  = Set.size curr
+        size' = Set.size curr'
+
+    linked x = (adjacent x g) \\ xs
 
 -----------------------------------------------------------
 -- * Constrain base types
@@ -288,7 +152,7 @@ tiedToClasses s = map extractFree $ stdNFcc s
 
 data BConstr k = BLt k k
                | BLtOr [k] [k] k
-           -- ^  BLtOr x  ys a ≡ txs < ta ∨ tys < ta
+           -- ^  BLtOr xs  ys  a  ≡  txs < ta ∨ tys < ta
     deriving (Eq, Show, Ord)
 -- ^ Base type constraints.
 --   @BConstr BVar@ will be used for inference
@@ -321,44 +185,12 @@ constrBaseTypes p = proveProc $ stdNF p
         xs' = lst xs
         classes = tiedToClasses s
         ys = Set.unions [fn | (_, fn, _) <- classes, fn `intersects` xs]
-        ys' = lst $ Set.delete a  $ ys \\ xs
+        ys' = lst $ Set.delete a $ ys \\ xs
 
     proveAlt (_, p) = proveProc p
 
     lst s = filter (not.isGlobal) $ Set.elems s
     stdAlt (p,c) = (p, stdNF c)
-    -- (\\) = Set.difference
-
--- -- | Base types sat instance
--- type BTSat = [(BVar, BVar, [BVar])]
---            -- dummy  key     adj
-
--- -- | A directed edge x → y in the graph represents y < x.
--- --   Nodes represent base type classes.
--- baseTypesGraph :: BTypeClasses -> [BConstr PiName] -> BTSat
--- baseTypesGraph btcl bcnstr = map adj $ toAdjList $ map quotient bcnstr
---   where
---     quotient (BLt x y) = (repr y, Set.singleton $ repr x)
---     quotient (BLtOr _ ys z) =  (repr z, Set.fromList $ map (repr) ys)
---     -- *IMPORTANT*: BLtOr is simplified by ignoring the first disjunct:
---     --              you can always circumvent it by not sending known things
---     --              i.e. the cases when you need it are uninteresting and can be avoided
---     insAll m = foldr defaultEmpty m $ allBVars btcl
---     toAdjList = Map.toList . insAll . (Map.fromListWith Set.union)
---     adj (x, ys) = (x, x, Set.toList ys)
---     defaultEmpty k = Map.insertWith (\_ x -> x) k Set.empty
---     repr = getRepr btcl
-
--- solveBTSat :: BTSat -> Either [[BVar]] [BVar]
--- solveBTSat g =
---     case partition acyclic $ stronglyConnComp g of
---         (solution, []) -> Right $ map untagA solution
---         (_,  conflict) -> Left  $ map untagC conflict
---   where
---     acyclic (AcyclicSCC _) = True
---     acyclic _              = False
---     untagA (AcyclicSCC x) = x
---     untagC (CyclicSCC x)  = x
 
 
 -- | A directed edge x → y in the graph represents x > y.
@@ -367,40 +199,184 @@ baseTypesGraph :: BTypeClasses -> [BConstr PiName] -> AdjMap BVar
 baseTypesGraph btcl bcnstr = toAdj $ map quotient bcnstr
   where
     quotient (BLt x y) = (repr y, Set.singleton $ repr x)
-    quotient (BLtOr _ ys z) =  (repr z, Set.fromList $ map (repr) ys)
+    quotient (BLtOr _ ys z) =  (repr z, Set.fromList $ map repr ys)
     -- *IMPORTANT*: BLtOr is simplified by ignoring the first disjunct:
     --              you can always circumvent it by not sending known things
-    toAdj = insAll . (Map.fromListWith Set.union)
-    insAll m = foldr defaultEmpty m $ allBVars btcl
-    defaultEmpty k = Map.insertWith (\_ x -> x) k Set.empty
+    toAdj = Map.fromListWith Set.union
+    -- insAll m = foldr defaultEmpty m $ allBVars btcl
+    defaultEmpty k = Map.insertWith (\_ x -> x) k (∅)
     repr = getRepr btcl
 
-data SolverError = Cycles [BVar] | TIncompat [BVar]
+-- | Lazily create a list of all instances arising from different choices of disjunctions.
+--   Gives priority to second disjuncts.
+--   A directed edge x → y in the graph represents x > y.
+--   Nodes represent base type classes.
+allBaseTypesGraphs :: BTypeClasses -> [BConstr PiName] -> [AdjMap BVar]
+allBaseTypesGraphs btcl bcnstr =
+    [ mergeAdj fixed (toAdj choice) | choice <- allChoices bltors]
+  where
+    (blts, bltors) = partition isBLt $ concatMap quotient bcnstr
+    fixed = toAdj $ map untag blts
+    allChoices [] = [[]]
+    allChoices (BLtOr xs ys z : cs) =
+        [(z, Set.fromList ys):rest | rest <- others] ++
+        [(z, Set.fromList xs):rest | rest <- others]
+      where others = allChoices cs
+
+    quotient (BLt x y) = [BLt (repr x) (repr y)]
+    quotient (BLtOr [] ys z) = [BLt (repr y) (repr z) | y <- ys]
+    quotient (BLtOr xs [] z) = [BLt (repr x) (repr z) | x <- xs]
+    quotient (BLtOr xs ys z) = [BLtOr (map repr xs) (map repr ys) (repr z)]
+
+    toAdj = Map.fromListWith Set.union
+    -- insAll m = foldr defaultEmpty m $ allBVars btcl -- not necessary: just use findWithDefault (∅)
+    defaultEmpty k = Map.insertWith (\_ x -> x) k (∅)
+    repr = getRepr btcl
+
+    mergeAdj = Map.unionWith Set.union
+
+    isBLt (BLt _ _) = True
+    isBLt _ = False
+
+    untag (BLt x y) = (y, Set.singleton x)
+
+
+-- | Lazily create a list of all /acyclic/ instances arising from different choices of disjunctions.
+--   equivalent to @(filter acyclic) . allBaseTypesGraphs@
+acyclicBaseTypesGraphs :: BTypeClasses -> [BConstr PiName] -> Either [[BVar]] [AdjMap BVar]
+acyclicBaseTypesGraphs btcl bcnstr =
+    case reachability blts of
+        Left  c       -> Left $ [cycles c]
+        Right transcl ->
+            case allChoices [] [] transcl disj [] of
+                (failed, []) -> Left failed
+                (_, success) -> Right success
+  where
+    (blts, bltors) = quotientBConstr btcl bcnstr
+    disj = concatMap (\(z, ds) -> [(z, xs, ys) | (xs, ys) <- ds]) $ Map.toList bltors
+
+    -- allChoices :: [[BVar]] -> [AdjMap BVar] -> AdjMap BVar -> [(BVar, Set BVar, Set BVar)] -> [(AdjMap BVar, [(BVar, Set BVar, Set BVar)])] -> ([[BVar]], [AdjMap BVar])
+    allChoices failed success curr [] rest = backtrack failed (curr:success) rest
+    allChoices failed success curr ((z,xs,ys):ds) rest =
+        case (reach curr (z, xs), reach curr (z, ys)) of
+            (Left cycle1, Left cycle2) ->
+                backtrack (cycles cycle1:cycles cycle2:failed) success rest
+            (Right choice1, Right choice2) ->
+                allChoices failed success choice2 ds ((choice1,ds):rest)
+            (Right choice1, Left cycle2) ->
+                allChoices (cycles cycle2:failed) success choice1 ds rest
+            (Left cycle1, Right choice2) ->
+                allChoices (cycles cycle1:failed) success choice2 ds rest
+
+    backtrack failed success [] = (failed, success)
+    backtrack failed success ((other,cont):rest) =
+        allChoices failed success other cont rest
+
+    cycles = Set.elems
+
+
+quotientBConstr :: BTypeClasses -> [BConstr PiName] -> (AdjMap BVar, Map BVar [(Set BVar, Set BVar)])
+quotientBConstr btcl bcnstr = foldr quotient (Map.empty, Map.empty) bcnstr
+  where
+    -- quotient :: BConstr PiName -> (Map BVar (Set BVar), Map BVar [(Set BVar, Set BVar)]) -> (Map BVar (Set BVar), Map BVar [(Set BVar, Set BVar)])
+    quotient (BLt x y) (mlt, mor) = (add x y mlt, mor)
+    quotient (BLtOr [] ys z) (mlt, mor) = (addAll ys z mlt, mor)
+    quotient (BLtOr xs [] z) (mlt, mor) = (addAll xs z mlt, mor)
+    quotient (BLtOr xs ys z) (mlt, mor) = (mlt, addOr xs ys z mor)
+
+    add x y = Map.insertWith Set.union (repr y)  (Set.singleton $ repr x)
+    addAll xs z = Map.insertWith Set.union (repr z) (reprset xs)
+    addOr xs ys z m = mergeOr (repr z) (reprset xs, reprset ys) m
+    -- the quick'n'easy option but it may introduce more choices than needed:
+    -- mergeOr k v m = Map.insertWith (++) k [v] m
+    mergeOr k (a,b) m = Map.insert k (merge [] ors) m
+      where
+        ors = Map.findWithDefault [] k m
+        merge done [] = (a,b):done
+        merge done ((a', b') : rest)
+          | a  ⊆ a' && b  ⊆ b' = ors
+          | a' ⊆ a  && b' ⊆ b  = (a, b):rest ++ done
+          | otherwise          = merge ((a',b'):done) rest
+
+    repr = getRepr btcl
+    reprset = Set.fromList . (map repr)
+
+
+-- | Takes a transitively closed DAG @g@, a node @n@ and a set of nodes @{n1, ..., nk}@.
+--   It returns @Right g'@ where @g'@ is the transitive closure of @g ∪ {(n, n1), ..., (n, nk)}@.
+--   It returns @Left xs@ if the added edges create a cycle with nodes @xs@.
+reach :: Ord n => AdjMap n -> (n, Set n) -> Either (Set n) (AdjMap n)
+reach graph (n, adj)
+    | n ∊ new   = Left $ Set.filter connected new
+    | otherwise = Right $ Map.mapWithKey insNew graph'
+  where
+    new = adj ∪ Set.unions [ adjacent x graph | x <- Set.elems adj ]
+    graph' = Map.insertWith (∪) n new graph
+    insNew x rs
+        | n ∊ rs    = Set.union rs new
+        | otherwise = rs
+    connected x = adjacent x graph `intersects` new
+
+reachability :: Ord n => AdjMap n -> Either (Set n) (AdjMap n)
+reachability graph = foldM reach graph $ Map.toList graph
+-- starting from graph instead of Map.empty saves a few cycles
+
+
+data SolverError = Cycles [[BVar]] | TIncompat [BVar]
+    deriving Show
+
+-- TODO: the solveBT* functions could be consolidated into a single solver parametric in the function generating the alternative or-free graphs
 
 solveBTConstr :: PiTerm -> BTypeClasses -> Either SolverError [BVar]
-solveBTConstr p btcl = tCompTopSort (baseTypesGraph btcl constr) Set.empty (allBVarsSet btcl)
+solveBTConstr p btcl =
+    case acyclicBaseTypesGraphs btcl constr of
+        (Left cs) -> Left $ Cycles cs
+        (Right choices) -> solveTcompat p btcl choices
+  where
+    constr = constrBaseTypes p
+
+solveBTConstrSlow :: PiTerm -> BTypeClasses -> Either SolverError [BVar]
+solveBTConstrSlow p btcl = solveTcompat p btcl $ allBaseTypesGraphs btcl constr
+  where
+    constr = constrBaseTypes p
+
+solveTcompat :: PiTerm -> BTypeClasses -> [AdjMap BVar] -> Either SolverError [BVar]
+solveTcompat p btcl choices =
+    case break isRight $ map (solveBTConstr' linkGr btcl) choices of
+        (e:_,  [] ) -> e
+        ( _ , s:_ ) -> s
   where
     linkGr = linkedToGraph p
-    constr = constrBaseTypes p
+
+    isRight (Right _) = True
+    isRight (Left  _) = False
+
+
+solveBTConstrIncomplete :: PiTerm -> BTypeClasses -> Either SolverError [BVar]
+solveBTConstrIncomplete p btcl = solveBTConstr' (linkedToGraph p) btcl (baseTypesGraph btcl $ constrBaseTypes p)
+
+-- solveBTConstr' :: PiTerm -> BTypeClasses -> AdjMap BVar -> Either SolverError [BVar] --old
+solveBTConstr' :: AdjMap PiName -> BTypeClasses -> AdjMap BVar -> Either SolverError [BVar]
+solveBTConstr' linkGr btcl btg = tCompTopSort btg (∅) (allBVarsSet btcl)
+  where
+    -- linkGr = linkedToGraph p
+    -- constr = constrBaseTypes p
     bvar2names = Map.map classToNames $ bvar2class btcl
     classToNames = tvarsToNames . snd
 
     outDegZero btg bv = Set.null $ bv ? btg
-    (?) = Map.findWithDefault Set.empty
-    -- (∪) = Set.union
-    -- (\\) = Set.difference
+    (?) = Map.findWithDefault (∅) -- different type from adjacent
 
-    untied done bv =
-        let names = (bv ? bvar2names)
-        in if Set.size names < 2
-            then True
-            else not $ relTied linkGr done $ Set.deleteFindMin names
+    untied done bv
+        | Set.size names < 2 = True
+        | otherwise = not $ relTied linkGr done $ Set.deleteFindMin names
+      where names  = bv ? bvar2names
 
     remove new g = Map.map (\\ new) $ Set.foldr Map.delete g new
 
     merge bts ns = Set.unions $ ns:map (? bvar2names) bts
 
-    cyclesFound = Left . Cycles . Set.elems
+    cyclesFound c = Left $ Cycles [Set.elems c]
     nonTcompat  = Left . TIncompat . Set.elems
 
     tCompTopSort btg doneNames rembvar
@@ -419,40 +395,24 @@ solveBTConstr p btcl = tCompTopSort (baseTypesGraph btcl constr) Set.empty (allB
                                 return $ rootsl ++ sorted
 
 
--- | Relativised tied-to relation:
---    is any of the @ys@ reachable from @y@ in @g@ never going through nodes in @xs@?
-relTied :: AdjMap PiName -> Set PiName -> (PiName, Set PiName) -> Bool
-relTied g xs (y, ys)
-  | Set.null ys = False -- optimisation
-  | otherwise = reach (Set.singleton y) (linked y)
-  where
-    reach curr front
-        | curr `intersects` ys = True
-        | size >= size'        = False
-        | otherwise            = reach curr' front'
-      where
-        curr' = curr ∪ front
-        front'= Set.foldr (\x s -> (linked x) ∪ s) Set.empty front
-        size  = Set.size curr
-        size' = Set.size curr'
-
-    linked x = (adjacent x) \\ xs
-    adjacent x = Map.findWithDefault Set.empty x g
-    -- (∪) = Set.union
-    -- (∩) = Set.intersection
-    -- (\\) = Set.difference
-
-
 data InferredTypes
     = ArityMismatch ArityError
     -- ^ Unification failed
-    | Inconsistent [[PiName]]
+    | Inconsistent {
+        cycles :: [[PiName]],
+        typing :: Map PiName BVar,
+        types  :: Map BVar (Maybe [BVar])
+    }
     -- ^ Base type constraints solving failed.
     --   Its argument is a list of cycles in the dependencies.
-    | NotTShaped [PiName]
+    | NotTShaped {
+        conflicts :: [PiName],
+        typing    :: Map PiName BVar,
+        types     :: Map BVar (Maybe [BVar])
+    }
     -- ^ The term is not T-shaped for the inferred T.
     --   Its argument is a list of names that need to have the same name
-    --   but appear together in the same sequential term.
+    --   have to be in the same scope.
     | Inferred {
         typing    :: Map PiName BVar,
         -- ^ typing @x ↦ i@ means @x :: τ_i@
@@ -465,41 +425,49 @@ data InferredTypes
     deriving (Eq, Show)
 
 inferTypes :: PiTerm -> InferredTypes
-inferTypes p =
+inferTypes = inferTypes' solveBTConstr
+
+inferTypesIncomplete :: PiTerm -> InferredTypes
+inferTypesIncomplete = inferTypes' solveBTConstrIncomplete
+
+inferTypesSlow :: PiTerm -> InferredTypes
+inferTypesSlow = inferTypes' solveBTConstrSlow
+
+inferTypes' solve p =
     case unifyTypes p of
         Left err -> ArityMismatch err
         Right eq ->
             let btcl = typeClasses eq
                 -- constr = constrBaseTypes p
                 -- g = baseTypesGraph btcl constr
-            in case solveBTConstr p btcl of
-                Left (Cycles  cycles)  -> Inconsistent $ resolveBVars btcl [cycles]
-                Left (TIncompat samet) -> NotTShaped $ bvarToNames' (allRestr p) btcl samet
+            in case solve p btcl of
+                Left (Cycles  cs) -> Inconsistent {
+                    cycles    = resolveBVars btcl cs
+                  , typing    = getTypeAnnot btcl
+                  , types     = buildTypes btcl
+                }
+                Left (TIncompat samet) -> NotTShaped {
+                    conflicts = bvarToNames' (allRestr p) btcl samet
+                  , typing    = getTypeAnnot btcl
+                  , types     = buildTypes btcl
+                }
                 Right solution -> Inferred {
                     typing    = getTypeAnnot btcl
-                  , types     = buildTypes btcl  -- TODO
+                  , types     = buildTypes btcl
                   , baseTypes = solution
                 }
-
-resolveBVars btcl = map (bvarToNames btcl)
-bvarToNames btcl = concatMap (getBVarNames btcl)
-bvarToNames' restr btcl = concatMap getBVarNames'
-  where getBVarNames' bvar =
-          Set.toList $ (tvarsToNames $ tvars bvar) ∩ restr
-        tvars bvar = snd $ (bvar2class btcl) Map.! bvar
-
-buildTypes btcl = Map.map genType $ bvar2class btcl
   where
-    genType (Nothing, _) = Nothing
-    genType (Just arity, ns) = Just $ map (argType ns) [1..arity]
-    argType ns i = getReprArg btcl (anyNameInClass ns) i
+    resolveBVars btcl = map (bvarToNames btcl)
+    bvarToNames btcl = concatMap (getBVarNames btcl)
+    bvarToNames' restr btcl = concatMap getBVarNames'
+      where getBVarNames' bvar =
+              Set.toList $ (tvarsToNames $ tvars bvar) ∩ restr
+            tvars bvar = snd $ (bvar2class btcl) Map.! bvar
 
-    anyNameInClass ns =
-        case Set.findMin ns of
-            (NameType x) -> x
-            _ -> error "Type inference: No name in class!"
+inferenceSucceeded :: InferredTypes -> Bool
+inferenceSucceeded Inferred{} = True
+inferenceSucceeded _ = False
 
-buildTypingEnv :: TypeC -> (Map PiName BVar, Map BVar (Maybe [BVar]))
-buildTypingEnv eq = let btcl = typeClasses eq in
-    (getTypeAnnot btcl, buildTypes btcl)
+isTypablyHierarchical :: PiTerm -> Bool
+isTypablyHierarchical = inferenceSucceeded . inferTypes
 

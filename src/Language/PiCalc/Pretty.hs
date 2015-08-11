@@ -267,7 +267,7 @@ prettyTerm TOpt{..} t = wrapTerm $ prt maxLvl t
         (PiCall pvar args) -> pretty pvar <> prArgs args
         (Bang proc)        -> parens $ bangSym <> prt d proc
       where
-        d' = case d of Nothing -> Nothing; Just i -> Just (i-1);
+        d' = fmap (subtract 1) d
 
         prefix (pre,proc)
             | isZero proc && not explicitZeros = prtPre pre

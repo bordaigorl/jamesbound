@@ -1,7 +1,7 @@
 -- | Convert mode
 module Convert(convert, runConvert) where
 
-import Frontend hiding (getWriter)
+import Frontend
 import System.IO
 import Language.PiCalc
 import Language.PiCalc.Dot
@@ -49,7 +49,7 @@ getOutputFiles inputFiles = do
             return $ zip inputFiles $ repeat $ writer
         Just  e -> do
             when (out /= Nothing) $
-                warnLn "Output using extension option, --output option ignored."
+                warnLn "Warning: Output using extension option, --output option ignored.\n"
             return [(p, withFile (inp ++ "." ++ e) WriteMode) | p@(inp,_,_) <- inputFiles]
 
 -- comment [] = ""

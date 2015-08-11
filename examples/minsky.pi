@@ -1,0 +1,70 @@
+/*
+Title:  Minsky encoding
+Author: Emanuele
+Date:   10/08/15
+
+An encoding of a Minsky machine with two counters.
+Instructions are
+
+  * `inc c i`: increase counter `c` and goto instruction `i`
+  * `dec c i j`: decrease counter `c` and goto instruction `i` if `c>0`, otherwise goto instruction `j`
+
+The last instruction is always `halt` and here we replace a goto last with just `0`.
+
+The machine encoded below is the following:
+
+    0: dec c1 1 4
+    1: inc c2 2
+    2: inc c2 3
+    3: dec c1 1 4
+    4: halt
+
+which has the effect of computing `2*c1 + c2`.
+
+The encoding of a zero test works by non-deterministically choosing between
+returning `is zero` while resetting the counter at the same time, or
+decreasing when non-zero.
+Reseting the counter is obtained by refreshing a name used as the representation
+of the counter, with the consequence that all the processes attached to the old
+name cannot communicate with any other part of the encoding in the future,
+they become garbage.
+To know if a run in the encoding represents a real run of the machine,
+one has to check that all the resets are done only when the counter was already zero
+which can be checked in the final configuration just by checking
+that there is no garbage.
+
+Such encodings are typably hierarchical and have the property that a
+configuration of the machine is reachable iff its garbage-free encoding is reachable,
+proving that reachability of typably hierarchical systems is undecidable.
+Coverability remains decidable because there are configurations of the encoding
+which cover halting ones but are the result of spurious runs
+(i.e. runs in the encoding which are not representing a real run in the machine).
+
+*/
+
+ν(i1,i2,i3,c1,c2,up1,up2,dw1,dw2,z1,z2,t1,t2).(
+
+// Initial state, c1 = 3, c2 = 0, pc = 0
+c1<t1> | t1!.t1!.t1! | c2<t2> | i0!
+
+// Definitions of the counters:
+| *(c1(t).(
+      up1?.(t! | c1<t>)
+    + down1?.(t?.c1<t>)
+    + z1!.(νt'.c1<t'>) // refresh t so the old one becomes garbage
+ ))
+| *(c2(t).(
+      up2?.(t! | c2<t>)
+    + down2?.(t?.c2<t>)
+    + z2!.(νt'.c2<t'>)
+ ))
+
+// The program instructions:
+
+| *( i0?.(down1!.i1! + z1?.0) )
+| *( i1?.up2!.i2! )
+| *( i2?.up2!.i3! )
+| *( i3?.(down1!.i1! + z1?.0) )
+//*( i4?.zero )
+
+)

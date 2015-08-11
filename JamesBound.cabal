@@ -17,7 +17,7 @@ Description:
 Executable jb
   Main-is:           JamesBound.hs
   hs-source-dirs:    src
-  ghc-options:       -rtsopts -O
+  ghc-options:       -rtsopts -O2
   cpp-options:       -D__CABAL_BUILD__
   Build-Depends:
     base>=4.0,
@@ -40,7 +40,7 @@ Executable jb
 
 Library
   hs-source-dirs:    src
-  ghc-options:       -O
+  ghc-options:       -O2
 
   Exposed-Modules:
     Language.PiCalc.Dot

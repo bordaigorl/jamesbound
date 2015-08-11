@@ -17,6 +17,8 @@ module Frontend(
     , userInputWith
     , output
     , outputLn
+    , colorWrap
+    , header
     , promptUser
     , promptUserLn
     , info
@@ -96,6 +98,19 @@ output s   = liftIO $ putStr s
 outputLn :: MonadIO m => String -> m ()
 outputLn s = liftIO $ putStrLn s
 
+colorWrap c action = do
+    whenOpt colored $ output $ "\x1b["++c++"m"
+    x <- action
+    whenOpt colored $ output "\x1b[0m"
+    return x
+
+colorWrapStr c s = do
+    color <- getOpt colored
+    if color then return ("\x1b["++c++"m" ++ s ++ "\x1b[0m")
+             else return s
+
+header = colorWrap "40;1;37"
+
 promptUser :: MonadIO m => String -> m ()
 promptUser   = liftIO . putStr
 promptUserLn :: MonadIO m => String -> m ()
@@ -107,18 +122,22 @@ infoLn s = liftIO $ whenNormal $ putStrLn s
 shout s   = liftIO $ whenLoud $ putStr s
 shoutLn s = liftIO $ whenLoud $ putStrLn s
 
-warn s   = liftIO $ whenLoud $ hPutStr stderr $ "Warning:\n" ++ unlines (map (" >  "++) s)
-warnLn s = liftIO $ whenLoud $ hPutStrLn stderr s
+warn s   = do
+    s' <- colorWrapStr "33" $ "Warning:\n" ++ unlines (map (" >  "++) s)
+    liftIO $ whenLoud $ hPutStr stderr s'
+warnLn s = do
+    s' <- colorWrapStr "33" s
+    liftIO $ whenLoud $ hPutStrLn stderr s'
 
 debugMsg "" = debugMsgs "" []
 debugMsg s = debugMsgs s []
 
-debugMsgs s  ss = liftIO $ do
+debugMsgs s  ss = colorWrap "31" $ liftIO $ do
     putStrLn $ "\n<<<<<<<<<<<   DEBUG "++s++"  >>>>>>>>>>>"
     putStrLn $ unlines $ map ("  "++) $ concatMap lines ss
     putStrLn $ "<<<<<<<<<<<    END "++s++"   >>>>>>>>>>>\n"
 
-fatal msg = liftIO $ do
+fatal msg = colorWrap "41" $ liftIO $ do
     hPutStr stderr "Fatal Error: "
     hPutStrLn stderr msg
     exitError

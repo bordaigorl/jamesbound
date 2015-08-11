@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, RecordWildCards #-}
+{-# OPTIONS_GHC -fno-cse #-}
 module Options(
       JBOpt(..)
     , ExplStrategy(..)
@@ -6,6 +7,7 @@ module Options(
     , RTDetail(..)
     , Quotienting(..)
     , PreorderRed(..)
+    , TypeInfAlg(..)
     , jbModes
     , whenLoud
     , isLoud
@@ -50,7 +52,7 @@ data JBOpt =
         , skipUnsupported :: Bool
         , showFileNames   :: Maybe Bool
         , colored         :: Bool
-        , simple          :: Bool
+        , algorithm       :: TypeInfAlg
         , abstract        :: Bool
         , withStats       :: Bool
         }
@@ -64,6 +66,15 @@ data PreorderRed = NoRed | GroupUnf deriving (Show, Eq, Ord, Data, Typeable)
 
 data ReprType = NoOutput | Normalised | NormalForm | Standard | Restricted | StdPict | JavaScript --  | StrPict
     deriving (Show, Eq, Data, Typeable)
+
+data TypeInfAlg = AlgComplete | AlgAltCompl | AlgIncomplete | AlgSimple
+    deriving (Eq, Data, Typeable)
+
+instance Show TypeInfAlg where
+    show AlgComplete   =  "complete"
+    show AlgAltCompl   =  "alternative"
+    show AlgIncomplete =  "incomplete"
+    show AlgSimple     =  "simple typing"
 
 explore :: JBOpt
 explore = Explore {
@@ -129,7 +140,7 @@ analyse = Analyse {
         , [AllCovering] &= name "all-cov"   &= help "Show all covered ancestors (slow)"
         , [ShowCongr]   &= name "congr"     &= help "Show congruence relation (slow)"
         , [HideQuot]    &= name "hide-quot" &= help "Hide edges to quotiented nodes"
-        , [HideUnfLbl]  &= name "hide-unf"   &= help "Hide unfolding actions on edges"
+        , [HideUnfLbl]  &= name "hide-unf"  &= help "Hide unfolding actions on edges"
         , [TermSnippet] &= name "snippet"   &= help "Show a snippet of the term in the state nodes"
         ]
         -- &= typ "0-4"
@@ -204,15 +215,26 @@ typeinf = TypeInf {
         &= name "filenames" &= name "f" &= explicit
         &= help "Show filename of input"
 
-    , simple = False
-        &= help "Only perform simple typing"
+    , algorithm = enum [
+          AlgComplete   &= name "complete"    &= explicit &= help "Default complete inference"
+        , AlgAltCompl   &= name "alternative" &= name "a" &= explicit &= help "Alternative implementation of complete inference"
+        , AlgIncomplete &= name "incomplete"  &= name "i" &= explicit &= help "Fast Incomplete inference"
+        , AlgSimple     &= name "simple"      &= name "s" &= explicit &= help "Only perform simple typing"
+        ]
+        &= help "Inference algorithm"
+
+    -- , simple = False
+    --     &= help "Only perform simple typing"
+
+    -- , incomplete = False
+    --     &= help "Use incomplete type system"
 
     , abstract = False
-        &= help "Abstract a term until it can be proved depth-bounded"
+        &= help "TODO! - Abstract a term until it can be proved depth-bounded"
 
     , withStats = False
         &= name "stats" &= name "S" &= explicit &= typFile
-        &= help "Print some stats about the typing"
+        &= help "TODO! - Print some stats about the typing"
 
     } &= details ["Infer hierarchical types from a pi term"]
 

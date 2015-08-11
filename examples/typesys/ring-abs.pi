@@ -1,0 +1,6 @@
+ν(master, slave).(
+    master<slave>
+  | *( master(next).self().(
+        (*(slave().next<>) | master<slave>)
+    ))
+)
