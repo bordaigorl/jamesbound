@@ -25,6 +25,7 @@ data JBOpt =
         , strategy     :: ExplStrategy
         , nonStop      :: Bool
         , withStats    :: Bool
+        , colored      :: Bool
         , strDotFile   :: Maybe FilePath
         , optUnfolding :: Bool
         }
@@ -37,6 +38,7 @@ data JBOpt =
         , reachDotFile :: Maybe FilePath
         , reduction    :: PreorderRed
         , quotienting  :: Quotienting
+        , colored      :: Bool
         }
     | Convert { -- transformation of pi-terms into other representations
           inputFiles   :: [FilePath]
@@ -44,6 +46,7 @@ data JBOpt =
         , outputFile   :: Maybe FilePath
         , extension    :: Maybe String
         , withStats    :: Bool
+        , colored      :: Bool
         , outType      :: ReprType
         }
     | TypeInf { -- hierarchical type inference
@@ -102,6 +105,9 @@ explore = Explore {
         &= name "stats" &= name "S" &= explicit &= typFile
         &= help "Print some stats about the input program"
 
+    , colored = False
+        &= help "Use colors in output"
+
     , strDotFile = Nothing &= typFile
         &= name "o" &= name "dump" &= explicit
         &= help "Save the current state as a dot graph in FILE"
@@ -155,6 +161,9 @@ analyse = Analyse {
         &= typ "N" &= name "d"
         &= help "Stop exploring a path when reaching a term exceeding N in depth"
 
+    , colored = False
+        &= help "Use colors in output"
+
     } &= details ["Generate the reachability tree"]
 
 convert :: JBOpt
@@ -179,6 +188,9 @@ convert = Convert {
     , withStats  = False
         &= name "S" &= name "stats" &= explicit &= typFile
         &= help "Print some stats about the input program"
+
+    , colored = False
+        &= help "Use colors in output"
 
     , outType    = enum [
           Normalised &= help "No-confl and normalised (default)"
